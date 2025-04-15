@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 const FileProcessor = () => {
   const [files, setFiles] = useState([]);
@@ -14,12 +14,51 @@ const FileProcessor = () => {
   const [totalCount, setTotalCount] = useState(0);
   const reportRef = useRef(null);
 
-
   const fileInputRef = useRef(null);
   const workerRef = useRef(null); // 💡 Usamos useRef para el Worker
 
   // Inicializar Worker
   useEffect(() => {
+    const handleProgress = (data) => {
+      if (data.progress !== undefined) setProgress(data.progress);
+      if (data.currentFile) setCurrentFile(data.currentFile);
+      if (data.processedCount !== undefined)
+        setProcessedCount(data.processedCount);
+      if (data.totalCount !== undefined) setTotalCount(data.totalCount);
+    };
+
+    const handleDeduplicateComplete = (data) => {
+      setUniqueIdsCount(data.uniqueIdsCount);
+      setLogs((prev) => [
+        ...prev,
+        `Se encontraron ${formatNumber(
+          data.uniqueIdsCount
+        )} IDs únicos después de la deduplicación.`,
+      ]);
+      startProcessingRequests(data.uniqueIds);
+    };
+
+    const handleProcessComplete = (data) => {
+      setIsProcessing(false);
+      setStatus("Proceso completado");
+      setCurrentFile(""); // limpiar nombre de archivo en progreso
+      setLogs((prev) => [
+        ...prev,
+        `Procesamiento completado.`,
+        `Solicitudes exitosas: ${data.successCount}`,
+        ...(data.failedRequests.length > 0
+          ? [
+              `Errores (${data.failedRequests.length}):`,
+              ...data.failedRequests.slice(0, 10),
+            ]
+          : ["Todos los requests fueron exitosos"]),
+      ]);
+    };
+
+    const handleError = (data) => {
+      setLogs((prev) => [...prev, `ERROR: ${data.message}`]);
+    };
+
     const workerInstance = new Worker(
       new URL("./fileProcessor.worker.js", import.meta.url),
       { type: "module" }
@@ -27,19 +66,23 @@ const FileProcessor = () => {
 
     workerInstance.onmessage = (e) => {
       const { type } = e.data;
+      const data = e.data;
 
       switch (type) {
         case "progress":
-          handleProgress(e.data);
+          handleProgress(data);
           break;
         case "deduplicateComplete":
-          handleDeduplicateComplete(e.data);
+          handleDeduplicateComplete(data);
           break;
         case "processComplete":
-          handleProcessComplete(e.data);
+          handleProcessComplete(data);
           break;
         case "error":
-          handleError(e.data);
+          handleError(data);
+          break;
+        case "log":
+          setLogs((prev) => [...prev, data.message]);
           break;
         default:
           break;
@@ -52,46 +95,6 @@ const FileProcessor = () => {
       workerInstance.terminate();
     };
   }, []);
-
-  const handleProgress = (data) => {
-    if (data.progress !== undefined) setProgress(data.progress);
-    if (data.currentFile) setCurrentFile(data.currentFile);
-    if (data.processedCount !== undefined)
-      setProcessedCount(data.processedCount);
-    if (data.totalCount !== undefined) setTotalCount(data.totalCount);
-  };
-
-  const handleDeduplicateComplete = (data) => {
-    setUniqueIdsCount(data.uniqueIdsCount);
-    setLogs((prev) => [
-      ...prev,
-      `Se encontraron ${formatNumber(
-        data.uniqueIdsCount
-      )} IDs únicos después de la deduplicación.`,
-    ]);
-    startProcessingRequests(data.uniqueIds);
-  };
-
-  const handleProcessComplete = (data) => {
-    setIsProcessing(false);
-    setStatus("Proceso completado");
-    setCurrentFile(""); // ← ¡agrega esta línea!
-    setLogs((prev) => [
-      ...prev,
-      `Procesamiento completado.`,
-      `Solicitudes exitosas: ${data.successCount}`,
-      ...(data.failedRequests.length > 0
-        ? [
-            `Errores (${data.failedRequests.length}):`,
-            ...data.failedRequests.slice(0, 10),
-          ]
-        : ["Todos los requests fueron exitosos"]),
-    ]);
-  };
-
-  const handleError = (data) => {
-    setLogs((prev) => [...prev, `ERROR: ${data.message}`]);
-  };
 
   const handleFileChange = (e) => {
     setFiles([...e.target.files]);
@@ -164,23 +167,23 @@ const FileProcessor = () => {
 
   const generatePDFReport = async () => {
     const input = reportRef.current;
-  
+
     if (!input) return;
-  
+
     const canvas = await html2canvas(input, {
       scale: 2,
-      useCORS: true
+      useCORS: true,
     });
-  
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-  
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("p", "mm", "a4");
+
     const pageWidth = pdf.internal.pageSize.getWidth();
     const imgProps = pdf.getImageProperties(imgData);
     const imgHeight = (imgProps.height * pageWidth) / imgProps.width;
-  
-    pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, imgHeight);
-  
+
+    pdf.addImage(imgData, "PNG", 0, 0, pageWidth, imgHeight);
+
     pdf.save(`reporte_indexacion_visual_${Date.now()}.pdf`);
   };
 

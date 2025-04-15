@@ -1,5 +1,7 @@
 // src/workers/fileProcessor.worker.js
 import * as XLSX from 'xlsx';
+import pLimit from 'p-limit';
+
 
 self.onmessage = async function (e) {
   const { files, endpointUrl, action } = e.data;
@@ -52,26 +54,44 @@ async function deduplicateFiles(files) {
   });
 }
 
+const limit = pLimit(20); // 🔒 máximo 20 peticiones concurrentes
+
 async function processRequests(uniqueIds, endpointUrl) {
   const batchSize = 50;
   const retries = 3;
   const failedRequests = [];
   let processedCount = 0;
+  let batchCounter = 1;
 
   for (let i = 0; i < uniqueIds.length; i += batchSize) {
     const batch = uniqueIds.slice(i, i + batchSize);
-    const requests = batch.map(productId =>
-      sendRequestWithRetry(productId, endpointUrl, retries)
+
+    const results = await Promise.allSettled(
+      batch.map(productId =>
+        limit(() => sendRequestWithRetry(productId, endpointUrl, retries))
+      )
     );
 
-    const results = await Promise.allSettled(requests);
+    // Contar errores en el batch
+    let batchErrors = 0;
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
+        batchErrors++;
         failedRequests.push(`${batch[index]} - Error: ${result.reason}`);
       }
     });
 
+    // 📝 Enviar log visual del resultado del lote
+    self.postMessage({
+      type: 'log',
+      message: `Lote ${batchCounter}: ${batchErrors > 0
+        ? `${batchErrors} errores (HTTP 500)`
+        : 'Todos los requests fueron exitosos'}`
+    });
+
+    batchCounter++;
     processedCount += batch.length;
+
     self.postMessage({
       type: 'progress',
       progress: Math.round((processedCount / uniqueIds.length) * 100),
