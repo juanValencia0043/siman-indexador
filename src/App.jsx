@@ -116,7 +116,7 @@ const FileProcessor = () => {
         action: "processRequests",
         uniqueIds,
         endpointUrl:
-          "https://omnicanalqa.siman.com/omnicanal/ecommerce/v1/webhook/items",
+          "https://omnicanal.simanscs.com/omnicanal/ecommerce/v1/webhook/items",
       });
     } else {
       setLogs((prev) => [...prev, "ERROR: Worker no está disponible"]);
