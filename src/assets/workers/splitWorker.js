@@ -1,4 +1,18 @@
+
 import * as XLSX from "xlsx";
+
+const EXPECTED_COLUMNS = [
+  "_SkuId (Not changeable)", "_SkuName", "_ActivateSkuIfPossible", "_SkuIsActive (Not changeable)", "_SkuEan",
+  "_Height", "_ActualHeight", "_Width", "_ActualWidth", "_Length", "_ActualLength",
+  "_Weight", "_ActualWeight", "_MeasurementUnit", "_UnitMultiplier", "_SKUReferenceCode",
+  "_RewardValue", "_EstimatedArrivalDate", "_ManufacturerCode", "_ProductId (Not changeable)",
+  "_ProductName (Required)", "_ProductShortDescription", "_ProductIsActive (Not changeable)",
+  "_ProductReferenceCodeId", "_ShowOnSite", "_CaptionLink (Not changeable)", "_ProductDescription",
+  "_ProductLaunchDate", "_Keywords", "_SiteTitle", "_MetaTagDescription", "_SupplierId",
+  "_ShowOutOfStock", "_Kit (Not changeable)", "_DepartamentId (Not changeable)", "_DepartamentName",
+  "_CategoryId", "_CategoryName", "_Brand", "_BrandId", "_CubicWeight", "_CommercialCondition",
+  "_Stores", "_Accessories", "_Similar", "_Suggestions", "_ShowTogether", "_Attachment"
+];
 
 self.onmessage = async (e) => {
   const { action, files } = e.data;
@@ -9,13 +23,12 @@ self.onmessage = async (e) => {
       const allRows = new Map();
       let headers = [];
 
-      // Leer y deduplicar
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const data = await readExcel(file);
 
         if (data.length > 0 && headers.length === 0) {
-          headers = Object.keys(data[0]);
+          headers = EXPECTED_COLUMNS;
         }
 
         data.forEach((row) => {
@@ -30,18 +43,24 @@ self.onmessage = async (e) => {
       const deduplicated = Array.from(allRows.values());
       postMessage({ type: "log", message: `🔍 Deduplicación completa: ${deduplicated.length} ítems únicos.` });
 
-      // Dividir en chunks de 10,000
       const chunks = chunkArray(deduplicated, 10000);
       postMessage({ type: "log", message: `📦 Generando ${chunks.length} archivo(s) de salida...` });
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        const ws = XLSX.utils.json_to_sheet(chunk, { header: headers });
+        const sortedChunk = chunk.map(row => {
+          const sortedRow = {};
+          headers.forEach(col => {
+            sortedRow[col] = row[col] ?? "";
+          });
+          return sortedRow;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(sortedChunk, { header: headers });
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Hoja1");
 
         const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-
         const blob = new Blob([wbout], { type: "application/octet-stream" });
         const url = URL.createObjectURL(blob);
 
@@ -50,7 +69,6 @@ self.onmessage = async (e) => {
           message: `📁 Archivo generado: bloque_${i + 1}.xlsx (${chunk.length} ítems).`,
         });
 
-        // ⚠️ Solo referencia (no descarga directa desde el worker)
         postMessage({
           type: "download",
           fileName: `bloque_${i + 1}.xlsx`,
@@ -67,7 +85,6 @@ self.onmessage = async (e) => {
   }
 };
 
-// Lee un archivo Excel desde un File objeto
 function readExcel(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -87,7 +104,6 @@ function readExcel(file) {
   });
 }
 
-// Divide un array en trozos
 function chunkArray(arr, size) {
   const result = [];
   for (let i = 0; i < arr.length; i += size) {
