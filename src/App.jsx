@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import MultiSplitProcessor from "./assets/components/MultiSplitProcessor.jsx";
 
 const FileProcessor = () => {
   const [files, setFiles] = useState([]);
@@ -13,6 +14,7 @@ const FileProcessor = () => {
   const [processedCount, setProcessedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const reportRef = useRef(null);
+  const [activeView, setActiveView] = useState("main");
 
   const fileInputRef = useRef(null);
   const workerRef = useRef(null); // 💡 Usamos useRef para el Worker
@@ -60,8 +62,8 @@ const FileProcessor = () => {
     };
 
     const workerInstance = new Worker(
-      new URL("./fileProcessor.worker.js", import.meta.url),
-      { type: "module" }
+      new URL("./assets/workers/fileProcessor.worker.js", import.meta.url),
+      { type: "module" }   
     );
 
     workerInstance.onmessage = (e) => {
@@ -189,150 +191,223 @@ const FileProcessor = () => {
 
   return (
     <div className="container" ref={reportRef}>
-      <h1>SIMAN | Gestor de Indexación de Productos</h1>
+      {activeView === "main" ? (
+        <>
+          <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
+            <button
+              onClick={() => setActiveView("main")}
+              style={{
+                backgroundColor: activeView === "main" ? "#007bff" : "#ccc",
+                color: "white",
+                padding: "0.5rem 1rem",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              Indexación
+            </button>
+            <button
+              onClick={() => setActiveView("split")}
+              style={{
+                backgroundColor: activeView === "split" ? "#28a745" : "#ccc",
+                color: "white",
+                padding: "0.5rem 1rem",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              Dividir Excel
+            </button>
+          </div>
 
-      <div
-        className={`upload-area ${isProcessing ? "disabled" : ""}`}
-        onClick={!isProcessing ? triggerFileInput : undefined}
-      >
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          multiple
-          accept=".xls,.xlsx"
-          style={{ display: "none" }}
-          disabled={isProcessing}
-        />
-        <div className="upload-icon">
-          {isProcessing ? (
-            <div className="spinner"></div>
-          ) : (
-            <svg width="50" height="50" viewBox="0 0 24 24">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-            </svg>
-          )}
-        </div>
-        {isProcessing ? (
-          <p>Procesando archivos...</p>
-        ) : (
-          <>
-            <p>Haz clic o arrastra archivos Excel aquí</p>
-            {files.length > 0 && (
-              <div className="file-list">
-                <p>Archivos seleccionados: {files.length}</p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          <h1>SIMAN | Gestor de Indexación de Productos</h1>
 
-      <button
-        onClick={processFiles}
-        disabled={isProcessing || files.length === 0}
-        className={`process-button ${isProcessing ? "processing" : ""}`}
-      >
-        {isProcessing ? (
-          <>
-            <span className="button-spinner"></span>
-            Procesando...
-          </>
-        ) : (
-          "Iniciar Procesamiento"
-        )}
-      </button>
-
-      <div className="progress-container">
-        <div className="progress-info">
-          {isProcessing && currentFile && (
-            <span className="current-file">Procesando: {currentFile}</span>
-          )}
-          {totalCount > 0 && (
-            <span className="count-info">
-              {formatNumber(processedCount)} / {formatNumber(totalCount)}
-            </span>
-          )}
-        </div>
-        <div className="progress-bar">
           <div
-            className="progress-fill"
-            style={{ width: `${progress}%` }}
-          ></div>
-        </div>
-        <div className="progress-text">{progress}%</div>
-      </div>
-
-      <div className="status-box">
-        <h3>Estado:</h3>
-        <p>{status}</p>
-        {uniqueIdsCount > 0 && (
-          <p>IDs únicos encontrados: {formatNumber(uniqueIdsCount)}</p>
-        )}
-      </div>
-
-      <div className="log-container">
-        <div className="log-header">
-          <h3>Registro de actividad</h3>
-          <button
-            onClick={() => setLogs([])}
-            className="clear-logs"
-            disabled={logs.length === 0}
+            className={`upload-area ${isProcessing ? "disabled" : ""}`}
+            onClick={!isProcessing ? triggerFileInput : undefined}
           >
-            Limpiar
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              multiple
+              accept=".xls,.xlsx"
+              style={{ display: "none" }}
+              disabled={isProcessing}
+            />
+            <div className="upload-icon">
+              {isProcessing ? (
+                <div className="spinner"></div>
+              ) : (
+                <svg width="50" height="50" viewBox="0 0 24 24">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                </svg>
+              )}
+            </div>
+            {isProcessing ? (
+              <p>Procesando archivos...</p>
+            ) : (
+              <>
+                <p>Haz clic para agregar archivos Excel aquí</p>
+                {files.length > 0 && (
+                  <div className="file-list">
+                    <p>Archivos seleccionados: {files.length}</p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={processFiles}
+            disabled={isProcessing || files.length === 0}
+            className={`process-button ${isProcessing ? "processing" : ""}`}
+          >
+            {isProcessing ? (
+              <>
+                <span className="button-spinner"></span>
+                Procesando...
+              </>
+            ) : (
+              "Iniciar Procesamiento"
+            )}
           </button>
-        </div>
-        <div className="log-content">
-          {logs.length === 0 ? (
-            <p className="empty-logs">No hay actividad para mostrar</p>
-          ) : (
-            logs.map((log, index) => (
-              <p
-                key={index}
-                className={log.startsWith("ERROR:") ? "error-log" : ""}
+
+          <div className="progress-container">
+            <div className="progress-info">
+              {isProcessing && currentFile && (
+                <span className="current-file">Procesando: {currentFile}</span>
+              )}
+              {totalCount > 0 && (
+                <span className="count-info">
+                  {formatNumber(processedCount)} / {formatNumber(totalCount)}
+                </span>
+              )}
+            </div>
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <div className="progress-text">{progress}%</div>
+          </div>
+
+          <div className="status-box">
+            <h3>Estado:</h3>
+            <p>{status}</p>
+            {uniqueIdsCount > 0 && (
+              <p>IDs únicos encontrados: {formatNumber(uniqueIdsCount)}</p>
+            )}
+          </div>
+
+          <div className="log-container">
+            <div className="log-header">
+              <h3>Registro de actividad</h3>
+              <button
+                onClick={() => setLogs([])}
+                className="clear-logs"
+                disabled={logs.length === 0}
               >
-                {log}
-              </p>
-            ))
+                Limpiar
+              </button>
+            </div>
+            <div className="log-content">
+              {logs.length === 0 ? (
+                <p className="empty-logs">No hay actividad para mostrar</p>
+              ) : (
+                logs.map((log, index) => (
+                  <p
+                    key={index}
+                    className={log.startsWith("ERROR:") ? "error-log" : ""}
+                  >
+                    {log}
+                  </p>
+                ))
+              )}
+            </div>
+          </div>
+
+          {!isProcessing && progress === 100 && (
+            <div
+              className="reset-container"
+              style={{ marginTop: "1rem", textAlign: "center" }}
+            >
+              <button
+                onClick={resetForm}
+                className="reset-button"
+                style={{
+                  backgroundColor: "#007bff",
+                  color: "white",
+                  padding: "0.6rem 1.2rem",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  marginRight: "1rem",
+                }}
+              >
+                Nueva indexación
+              </button>
+              <button
+                onClick={generatePDFReport}
+                className="reset-button"
+                style={{
+                  backgroundColor: "#28a745",
+                  color: "white",
+                  padding: "0.6rem 1.2rem",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  marginRight: "1rem",
+                }}
+              >
+                Generar reporte
+              </button>
+              <button
+                onClick={() => setActiveView("split")}
+                className="reset-button"
+                style={{
+                  backgroundColor: "#6c757d",
+                  color: "white",
+                  padding: "0.6rem 1.2rem",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Dividir archivos por bloques
+              </button>
+            </div>
           )}
-        </div>
-      </div>
-      {!isProcessing && progress === 100 && (
-        <div
-          className="reset-container"
-          style={{ marginTop: "1rem", textAlign: "center" }}
-        >
-          <button
-            onClick={resetForm}
-            className="reset-button"
-            style={{
-              backgroundColor: "#007bff",
-              color: "white",
-              padding: "0.6rem 1.2rem",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              marginRight: "1rem",
-            }}
-          >
-            Nueva indexación
-          </button>
-          <button
-            onClick={generatePDFReport}
-            className="reset-button"
-            style={{
-              backgroundColor: "#28a745",
-              color: "white",
-              padding: "0.6rem 1.2rem",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "bold",
-            }}
-          >
-            Generar reporte
-          </button>
-        </div>
+        </>
+      ) : (
+        <>
+          <MultiSplitProcessor />
+          <div style={{ textAlign: "center", marginTop: "1rem" }}>
+            <button
+              onClick={() => setActiveView("main")}
+              className="reset-button"
+              style={{
+                backgroundColor: "#007bff",
+                color: "white",
+                padding: "0.6rem 1.2rem",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              Volver
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
