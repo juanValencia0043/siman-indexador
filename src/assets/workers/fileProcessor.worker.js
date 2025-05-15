@@ -2,14 +2,13 @@
 import * as XLSX from 'xlsx';
 import pLimit from 'p-limit';
 
-
 self.onmessage = async function (e) {
-  const { files, endpointUrl, action } = e.data;
+  const { files, endpointUrl, action, country } = e.data;
 
   if (action === 'deduplicate') {
     await deduplicateFiles(files);
   } else if (action === 'processRequests') {
-    await processRequests(e.data.uniqueIds, endpointUrl);
+    await processRequests(e.data.uniqueIds, endpointUrl, country);
   }
 };
 
@@ -54,9 +53,9 @@ async function deduplicateFiles(files) {
   });
 }
 
-const limit = pLimit(20); // 🔒 máximo 20 peticiones concurrentes
+const limit = pLimit(20); // máximo 20 peticiones concurrentes
 
-async function processRequests(uniqueIds, endpointUrl) {
+async function processRequests(uniqueIds, endpointUrl, country) {
   const batchSize = 50;
   const retries = 3;
   const failedRequests = [];
@@ -64,15 +63,23 @@ async function processRequests(uniqueIds, endpointUrl) {
   let batchCounter = 1;
 
   for (let i = 0; i < uniqueIds.length; i += batchSize) {
-    const batch = uniqueIds.slice(i, i + batchSize);
+    const batch = uniqueIds.slice(i, i + batchSize).filter(Boolean); // ⚠️ Validar que no estén vacíos
+
+    if (batch.length === 0) {
+      self.postMessage({
+        type: 'log',
+        message: `Lote ${batchCounter}: ⚠️ Batch vacío omitido.`
+      });
+      batchCounter++;
+      continue;
+    }
 
     const results = await Promise.allSettled(
       batch.map(productId =>
-        limit(() => sendRequestWithRetry(productId, endpointUrl, retries))
+        limit(() => sendRequestWithRetry(productId, endpointUrl, retries, country))
       )
     );
 
-    // Contar errores en el batch
     let batchErrors = 0;
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
@@ -81,7 +88,6 @@ async function processRequests(uniqueIds, endpointUrl) {
       }
     });
 
-    // 📝 Enviar log visual del resultado del lote
     self.postMessage({
       type: 'log',
       message: `Lote ${batchCounter}: ${batchErrors > 0
@@ -107,12 +113,13 @@ async function processRequests(uniqueIds, endpointUrl) {
   });
 }
 
-async function sendRequestWithRetry(productId, endpointUrl, maxRetries) {
+async function sendRequestWithRetry(productId, endpointUrl, maxRetries, country) {
   let lastError;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const payload = {
+        country: country || "SV", // soporte dinámico, fallback si no viene
         idSku: "string",
         productId,
         an: "string",

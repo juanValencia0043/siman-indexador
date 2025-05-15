@@ -3,6 +3,11 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import MultiSplitProcessor from "./assets/components/MultiSplitProcessor.jsx";
 
+const QA_ENDPOINT =
+  "https://omnicanalqa.siman.com/omnicanal/ecommerce/v1/webhook/items";
+const PROD_ENDPOINT =
+  "https://omnicanal.simanscs.com/omnicanal/ecommerce/v1/webhook/items";
+
 const FileProcessor = () => {
   const [files, setFiles] = useState([]);
   const [progress, setProgress] = useState(0);
@@ -13,75 +18,60 @@ const FileProcessor = () => {
   const [currentFile, setCurrentFile] = useState("");
   const [processedCount, setProcessedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const reportRef = useRef(null);
+  const [selectedCountry, setSelectedCountry] = useState("SV");
+  const [selectedEnv, setSelectedEnv] = useState("QA");
   const [activeView, setActiveView] = useState("main");
 
   const fileInputRef = useRef(null);
-  const workerRef = useRef(null); // 💡 Usamos useRef para el Worker
+  const reportRef = useRef(null);
+  const workerRef = useRef(null);
 
-  // Inicializar Worker
   useEffect(() => {
-    const handleProgress = (data) => {
-      if (data.progress !== undefined) setProgress(data.progress);
-      if (data.currentFile) setCurrentFile(data.currentFile);
-      if (data.processedCount !== undefined)
-        setProcessedCount(data.processedCount);
-      if (data.totalCount !== undefined) setTotalCount(data.totalCount);
-    };
-
-    const handleDeduplicateComplete = (data) => {
-      setUniqueIdsCount(data.uniqueIdsCount);
-      setLogs((prev) => [
-        ...prev,
-        `Se encontraron ${formatNumber(
-          data.uniqueIdsCount
-        )} IDs únicos después de la deduplicación.`,
-      ]);
-      startProcessingRequests(data.uniqueIds);
-    };
-
-    const handleProcessComplete = (data) => {
-      setIsProcessing(false);
-      setStatus("Proceso completado");
-      setCurrentFile(""); // limpiar nombre de archivo en progreso
-      setLogs((prev) => [
-        ...prev,
-        `Procesamiento completado.`,
-        `Solicitudes exitosas: ${data.successCount}`,
-        ...(data.failedRequests.length > 0
-          ? [
-              `Errores (${data.failedRequests.length}):`,
-              ...data.failedRequests.slice(0, 10),
-            ]
-          : ["Todos los requests fueron exitosos"]),
-      ]);
-    };
-
-    const handleError = (data) => {
-      setLogs((prev) => [...prev, `ERROR: ${data.message}`]);
-    };
-
     const workerInstance = new Worker(
       new URL("./assets/workers/fileProcessor.worker.js", import.meta.url),
-      { type: "module" }   
+      { type: "module" }
     );
 
     workerInstance.onmessage = (e) => {
-      const { type } = e.data;
-      const data = e.data;
+      const { type, ...data } = e.data;
 
       switch (type) {
         case "progress":
-          handleProgress(data);
+          if (data.progress !== undefined) setProgress(data.progress);
+          if (data.currentFile) setCurrentFile(data.currentFile);
+          if (data.processedCount !== undefined)
+            setProcessedCount(data.processedCount);
+          if (data.totalCount !== undefined) setTotalCount(data.totalCount);
           break;
         case "deduplicateComplete":
-          handleDeduplicateComplete(data);
+          setUniqueIdsCount(data.uniqueIdsCount);
+          setLogs((prev) => [
+            ...prev,
+            `Se encontraron ${formatNumber(
+              data.uniqueIdsCount
+            )} IDs únicos después de la deduplicación.`,
+          ]);
+          startProcessingRequests(data.uniqueIds);
           break;
         case "processComplete":
-          handleProcessComplete(data);
+          setIsProcessing(false);
+          setStatus("Proceso completado");
+          setCurrentFile("");
+          setLogs((prev) => [
+            ...prev,
+            "Procesamiento completado.",
+            `Solicitudes exitosas: ${data.successCount}`,
+            ...(data.failedRequests.length > 0
+              ? [
+                  `Errores (${data.failedRequests.length}):`,
+                  ...data.failedRequests.slice(0, 10),
+                ]
+              : ["Todos los requests fueron exitosos"]),
+          ]);
           break;
         case "error":
-          handleError(data);
+          setIsProcessing(false);
+          setLogs((prev) => [...prev, `ERROR: ${data.message}`]);
           break;
         case "log":
           setLogs((prev) => [...prev, data.message]);
@@ -108,6 +98,8 @@ const FileProcessor = () => {
   };
 
   const startProcessingRequests = (uniqueIds) => {
+    const endpoint = selectedEnv === "PROD" ? PROD_ENDPOINT : QA_ENDPOINT;
+
     setStatus("Enviando solicitudes...");
     setProgress(0);
     setTotalCount(uniqueIds.length);
@@ -117,11 +109,9 @@ const FileProcessor = () => {
       workerRef.current.postMessage({
         action: "processRequests",
         uniqueIds,
-        endpointUrl:
-          "https://omnicanal.simanscs.com/omnicanal/ecommerce/v1/webhook/items",
+        endpointUrl: endpoint,
+        country: selectedCountry,
       });
-    } else {
-      setLogs((prev) => [...prev, "ERROR: Worker no está disponible"]);
     }
   };
 
@@ -136,22 +126,10 @@ const FileProcessor = () => {
     setLogs((prev) => [...prev, "Iniciando deduplicación..."]);
     setProgress(0);
 
-    if (workerRef.current) {
-      workerRef.current.postMessage({
-        action: "deduplicate",
-        files: files,
-      });
-    } else {
-      setLogs((prev) => [...prev, "ERROR: Worker no está disponible"]);
-    }
-  };
-
-  const triggerFileInput = () => {
-    fileInputRef.current.click();
-  };
-
-  const formatNumber = (num) => {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    workerRef.current.postMessage({
+      action: "deduplicate",
+      files: files,
+    });
   };
 
   const resetForm = () => {
@@ -169,14 +147,9 @@ const FileProcessor = () => {
 
   const generatePDFReport = async () => {
     const input = reportRef.current;
-
     if (!input) return;
 
-    const canvas = await html2canvas(input, {
-      scale: 2,
-      useCORS: true,
-    });
-
+    const canvas = await html2canvas(input, { scale: 2, useCORS: true });
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
 
@@ -185,41 +158,23 @@ const FileProcessor = () => {
     const imgHeight = (imgProps.height * pageWidth) / imgProps.width;
 
     pdf.addImage(imgData, "PNG", 0, 0, pageWidth, imgHeight);
-
     pdf.save(`reporte_indexacion_visual_${Date.now()}.pdf`);
+  };
+
+  const formatNumber = (num) =>
+    num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  const triggerFileInput = () => {
+    fileInputRef.current.click();
   };
 
   return (
     <div className="container" ref={reportRef}>
       {activeView === "main" ? (
         <>
-          <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
-            <button
-              onClick={() => setActiveView("main")}
-              style={{
-                backgroundColor: activeView === "main" ? "#007bff" : "#ccc",
-                color: "white",
-                padding: "0.5rem 1rem",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              Indexación
-            </button>
-            <button
-              onClick={() => setActiveView("split")}
-              style={{
-                backgroundColor: activeView === "split" ? "#28a745" : "#ccc",
-                color: "white",
-                padding: "0.5rem 1rem",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
+          <div className="view-switch">
+            <button className="btn-switch" onClick={() => setActiveView("main")}>Indexación</button>
+            <button onClick={() => setActiveView("split")}>
               Dividir Excel
             </button>
           </div>
@@ -243,23 +198,55 @@ const FileProcessor = () => {
               {isProcessing ? (
                 <div className="spinner"></div>
               ) : (
-                <svg width="50" height="50" viewBox="0 0 24 24">
-                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                <svg
+                  width="48"
+                  height="48"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                  <polyline points="7 9 12 4 17 9" />
+                  <line x1="12" y1="4" x2="12" y2="16" />
                 </svg>
               )}
             </div>
-            {isProcessing ? (
-              <p>Procesando archivos...</p>
-            ) : (
-              <>
-                <p>Haz clic para agregar archivos Excel aquí</p>
-                {files.length > 0 && (
-                  <div className="file-list">
-                    <p>Archivos seleccionados: {files.length}</p>
-                  </div>
-                )}
-              </>
-            )}
+            <p>
+              {isProcessing
+                ? "Procesando archivos..."
+                : "Haz clic para subir archivos Excel"}
+            </p>
+          </div>
+
+          <div className="selectors">
+            <label className="settings-selector">
+              País:
+              <select
+                value={selectedCountry}
+                onChange={(e) => setSelectedCountry(e.target.value)}
+                disabled={isProcessing}
+              >
+                <option value="SV">El Salvador</option>
+                <option value="GT">Guatemala</option>
+                <option value="CR">Costa Rica</option>
+                <option value="NI">Nicaragua</option>
+              </select>
+            </label>
+
+            <label className="settings-selector">
+              Entorno:
+              <select
+                value={selectedEnv}
+                onChange={(e) => setSelectedEnv(e.target.value)}
+                disabled={isProcessing}
+              >
+                <option value="QA">QA</option>
+                <option value="PROD">Producción</option>
+              </select>
+            </label>
           </div>
 
           <button
@@ -267,23 +254,16 @@ const FileProcessor = () => {
             disabled={isProcessing || files.length === 0}
             className={`process-button ${isProcessing ? "processing" : ""}`}
           >
-            {isProcessing ? (
-              <>
-                <span className="button-spinner"></span>
-                Procesando...
-              </>
-            ) : (
-              "Iniciar Procesamiento"
-            )}
+            {isProcessing ? "Procesando..." : "Iniciar Procesamiento"}
           </button>
 
           <div className="progress-container">
             <div className="progress-info">
               {isProcessing && currentFile && (
-                <span className="current-file">Procesando: {currentFile}</span>
+                <span>Procesando: {currentFile}</span>
               )}
               {totalCount > 0 && (
-                <span className="count-info">
+                <span>
                   {formatNumber(processedCount)} / {formatNumber(totalCount)}
                 </span>
               )}
@@ -308,11 +288,7 @@ const FileProcessor = () => {
           <div className="log-container">
             <div className="log-header">
               <h3>Registro de actividad</h3>
-              <button
-                onClick={() => setLogs([])}
-                className="clear-logs"
-                disabled={logs.length === 0}
-              >
+              <button onClick={() => setLogs([])} disabled={logs.length === 0}>
                 Limpiar
               </button>
             </div>
@@ -333,56 +309,11 @@ const FileProcessor = () => {
           </div>
 
           {!isProcessing && progress === 100 && (
-            <div
-              className="reset-container"
-              style={{ marginTop: "1rem", textAlign: "center" }}
-            >
-              <button
-                onClick={resetForm}
-                className="reset-button"
-                style={{
-                  backgroundColor: "#007bff",
-                  color: "white",
-                  padding: "0.6rem 1.2rem",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  marginRight: "1rem",
-                }}
-              >
-                Nueva indexación
-              </button>
-              <button
-                onClick={generatePDFReport}
-                className="reset-button"
-                style={{
-                  backgroundColor: "#28a745",
-                  color: "white",
-                  padding: "0.6rem 1.2rem",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  marginRight: "1rem",
-                }}
-              >
-                Generar reporte
-              </button>
-              <button
-                onClick={() => setActiveView("split")}
-                className="reset-button"
-                style={{
-                  backgroundColor: "#6c757d",
-                  color: "white",
-                  padding: "0.6rem 1.2rem",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                Dividir archivos por bloques
+            <div className="reset-container">
+              <button onClick={resetForm}>Nueva indexación</button>
+              <button onClick={generatePDFReport}>Generar reporte</button>
+              <button onClick={() => setActiveView("split")}>
+                Dividir archivos
               </button>
             </div>
           )}
@@ -391,21 +322,7 @@ const FileProcessor = () => {
         <>
           <MultiSplitProcessor />
           <div style={{ textAlign: "center", marginTop: "1rem" }}>
-            <button
-              onClick={() => setActiveView("main")}
-              className="reset-button"
-              style={{
-                backgroundColor: "#007bff",
-                color: "white",
-                padding: "0.6rem 1.2rem",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              Volver
-            </button>
+            <button onClick={() => setActiveView("main")}>Volver</button>
           </div>
         </>
       )}
