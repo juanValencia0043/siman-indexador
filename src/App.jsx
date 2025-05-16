@@ -174,7 +174,7 @@ const FileProcessor = () => {
         <>
           <div className="view-switch">
             <button className="btn-switch" onClick={() => setActiveView("main")}>Indexación</button>
-            <button onClick={() => setActiveView("split")}>
+            <button className="btn-switch" onClick={() => setActiveView("split")}>
               Dividir Excel
             </button>
           </div>
@@ -288,7 +288,7 @@ const FileProcessor = () => {
           <div className="log-container">
             <div className="log-header">
               <h3>Registro de actividad</h3>
-              <button onClick={() => setLogs([])} disabled={logs.length === 0}>
+              <button className="btn-switch" onClick={() => setLogs([])} disabled={logs.length === 0}>
                 Limpiar
               </button>
             </div>
@@ -322,7 +322,7 @@ const FileProcessor = () => {
         <>
           <MultiSplitProcessor />
           <div style={{ textAlign: "center", marginTop: "1rem" }}>
-            <button onClick={() => setActiveView("main")}>Volver</button>
+            <button className="btn-switch" onClick={() => setActiveView("main")}>Volver</button>
           </div>
         </>
       )}
