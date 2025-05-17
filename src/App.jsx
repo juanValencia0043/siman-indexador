@@ -43,7 +43,7 @@ const FileProcessor = () => {
             setProcessedCount(data.processedCount);
           if (data.totalCount !== undefined) setTotalCount(data.totalCount);
           break;
-        case "deduplicateComplete":
+        case "deduplicateComplete": {
           setUniqueIdsCount(data.uniqueIdsCount);
           setLogs((prev) => [
             ...prev,
@@ -51,8 +51,21 @@ const FileProcessor = () => {
               data.uniqueIdsCount
             )} IDs únicos después de la deduplicación.`,
           ]);
-          startProcessingRequests(data.uniqueIds);
+
+          const resolvedEndpoint =
+            selectedEnv === "PROD" ? PROD_ENDPOINT : QA_ENDPOINT;
+
+          console.log(
+            "✅ Enviando a worker país/entorno:",
+            data.country,
+            resolvedEndpoint
+          );
+
+          startProcessingRequests(data.uniqueIds, data.country, data.env);
+
           break;
+        }
+
         case "processComplete":
           setIsProcessing(false);
           setStatus("Proceso completado");
@@ -97,8 +110,10 @@ const FileProcessor = () => {
     ]);
   };
 
-  const startProcessingRequests = (uniqueIds) => {
-    const endpoint = selectedEnv === "PROD" ? PROD_ENDPOINT : QA_ENDPOINT;
+  const startProcessingRequests = (uniqueIds, countryFromDedup, env) => {
+    const endpoint = env === "PROD" ? PROD_ENDPOINT : QA_ENDPOINT;
+
+    console.log("✅ Enviando a worker país y entorno:", countryFromDedup, env);
 
     setStatus("Enviando solicitudes...");
     setProgress(0);
@@ -110,7 +125,7 @@ const FileProcessor = () => {
         action: "processRequests",
         uniqueIds,
         endpointUrl: endpoint,
-        country: selectedCountry,
+        country: countryFromDedup,
       });
     }
   };
@@ -121,14 +136,25 @@ const FileProcessor = () => {
       return;
     }
 
+    const countrySnapshot = selectedCountry;
+    const envSnapshot = selectedEnv;
+
     setIsProcessing(true);
     setStatus("Procesando archivos...");
     setLogs((prev) => [...prev, "Iniciando deduplicación..."]);
     setProgress(0);
 
+    console.log(
+      "🚀 Enviando country/env al worker:",
+      countrySnapshot,
+      envSnapshot
+    );
+
     workerRef.current.postMessage({
       action: "deduplicate",
       files: files,
+      country: countrySnapshot,
+      env: envSnapshot, // ✅ Agregar entorno
     });
   };
 
@@ -173,8 +199,16 @@ const FileProcessor = () => {
       {activeView === "main" ? (
         <>
           <div className="view-switch">
-            <button className="btn-switch" onClick={() => setActiveView("main")}>Indexación</button>
-            <button className="btn-switch" onClick={() => setActiveView("split")}>
+            <button
+              className="btn-switch"
+              onClick={() => setActiveView("main")}
+            >
+              Indexación
+            </button>
+            <button
+              className="btn-switch"
+              onClick={() => setActiveView("split")}
+            >
               Dividir Excel
             </button>
           </div>
@@ -226,7 +260,10 @@ const FileProcessor = () => {
               País:
               <select
                 value={selectedCountry}
-                onChange={(e) => setSelectedCountry(e.target.value)}
+                onChange={(e) => {
+                  console.log("Cambio país:", e.target.value); // 🐛 ¿Se imprime esto?
+                  setSelectedCountry(e.target.value);
+                }}
                 disabled={isProcessing}
               >
                 <option value="SV">El Salvador</option>
@@ -288,7 +325,11 @@ const FileProcessor = () => {
           <div className="log-container">
             <div className="log-header">
               <h3>Registro de actividad</h3>
-              <button className="btn-switch" onClick={() => setLogs([])} disabled={logs.length === 0}>
+              <button
+                className="btn-switch"
+                onClick={() => setLogs([])}
+                disabled={logs.length === 0}
+              >
                 Limpiar
               </button>
             </div>
@@ -322,7 +363,12 @@ const FileProcessor = () => {
         <>
           <MultiSplitProcessor />
           <div style={{ textAlign: "center", marginTop: "1rem" }}>
-            <button className="btn-switch" onClick={() => setActiveView("main")}>Volver</button>
+            <button
+              className="btn-switch"
+              onClick={() => setActiveView("main")}
+            >
+              Volver
+            </button>
           </div>
         </>
       )}

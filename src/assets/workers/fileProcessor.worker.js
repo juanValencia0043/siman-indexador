@@ -3,16 +3,16 @@ import * as XLSX from 'xlsx';
 import pLimit from 'p-limit';
 
 self.onmessage = async function (e) {
-  const { files, endpointUrl, action, country } = e.data;
+  const { files, endpointUrl, action, country, env } = e.data;
 
   if (action === 'deduplicate') {
-    await deduplicateFiles(files);
+    await deduplicateFiles(files, country, env);
   } else if (action === 'processRequests') {
     await processRequests(e.data.uniqueIds, endpointUrl, country);
   }
 };
 
-async function deduplicateFiles(files) {
+async function deduplicateFiles(files, country, env) {
   const possibleColumns = ["_ProductId (Not changeable)"];
   const uniqueIds = new Set();
   let processedCount = 0;
@@ -49,7 +49,9 @@ async function deduplicateFiles(files) {
   self.postMessage({
     type: 'deduplicateComplete',
     uniqueIds: Array.from(uniqueIds),
-    uniqueIdsCount: uniqueIds.size
+    uniqueIdsCount: uniqueIds.size,
+    country,  // ya lo estás pasando
+    env       // ✅ nuevo
   });
 }
 
@@ -119,7 +121,7 @@ async function sendRequestWithRetry(productId, endpointUrl, maxRetries, country)
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const payload = {
-        country: country || "SV", // soporte dinámico, fallback si no viene
+        country: country || "GT", // soporte dinámico, fallback si no viene
         idSku: "string",
         productId,
         an: "string",
