@@ -1,11 +1,10 @@
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
 }
 
 body {
@@ -59,6 +58,7 @@ h1 {
 
 .upload-area:hover {
   background-color: #f0f4ff;
+  cursor: pointer;
 }
 
 .upload-icon svg {
@@ -128,7 +128,7 @@ h1 {
   background-color: #ffffff;
   padding: 1.5rem;
   border-radius: 12px;
-  box-shadow: 0 0 10px rgba(0,0,0,0.03);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.03);
   margin-bottom: 1.5rem;
 }
 
@@ -138,7 +138,7 @@ h1 {
   padding: 1.5rem;
   max-height: 300px;
   overflow-y: auto;
-  box-shadow: 0 0 8px rgba(0,0,0,0.05);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
 }
 
 .log-header {

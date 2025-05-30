@@ -43,7 +43,7 @@ self.onmessage = async (e) => {
       const deduplicated = Array.from(allRows.values());
       postMessage({ type: "log", message: `🔍 Deduplicación completa: ${deduplicated.length} ítems únicos.` });
 
-      const chunks = chunkArray(deduplicated, 10000);
+      const chunks = chunkArray(deduplicated, 20000);
       postMessage({ type: "log", message: `📦 Generando ${chunks.length} archivo(s) de salida...` });
 
       for (let i = 0; i < chunks.length; i++) {

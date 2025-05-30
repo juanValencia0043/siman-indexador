@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import MultiSplitProcessor from "./assets/components/MultiSplitProcessor.jsx";
+import Swal from "sweetalert2";
 
 const QA_ENDPOINT =
   "https://omnicanalqa.siman.com/omnicanal/ecommerce/v1/webhook/items";
@@ -31,6 +32,8 @@ const FileProcessor = () => {
       new URL("./assets/workers/fileProcessor.worker.js", import.meta.url),
       { type: "module" }
     );
+
+    console.log("✅ fileInputRef en montaje:", fileInputRef.current);
 
     workerInstance.onmessage = (e) => {
       const { type, ...data } = e.data;
@@ -85,6 +88,12 @@ const FileProcessor = () => {
         case "error":
           setIsProcessing(false);
           setLogs((prev) => [...prev, `ERROR: ${data.message}`]);
+
+          Swal.fire({
+            icon: "error",
+            title: "Ocurrió un error",
+            text: data.message,
+          });
           break;
         case "log":
           setLogs((prev) => [...prev, data.message]);
@@ -131,10 +140,21 @@ const FileProcessor = () => {
   };
 
   const processFiles = () => {
-    if (files.length === 0) {
-      setStatus("Por favor selecciona al menos un archivo");
+    const currentFiles = fileInputRef.current?.files;
+
+    if (!currentFiles || currentFiles.length === 0) {
+      console.log("❌ No hay archivos, se debe lanzar el modal");
+      Swal.fire({
+        icon: "warning",
+        title: "Ningún archivo seleccionado",
+        text: "Por favor subí al menos un archivo Excel.",
+        confirmButtonColor: "#6c5ce7",
+      });
       return;
     }
+
+    // Refrescar el estado manualmente por si fue omitido
+    setFiles(Array.from(currentFiles));
 
     const countrySnapshot = selectedCountry;
     const envSnapshot = selectedEnv;
@@ -145,16 +165,16 @@ const FileProcessor = () => {
     setProgress(0);
 
     console.log(
-      "🚀 Enviando country/env al worker:",
+      "✅ Enviando país y entorno al worker:",
       countrySnapshot,
       envSnapshot
     );
 
     workerRef.current.postMessage({
       action: "deduplicate",
-      files: files,
+      files: Array.from(currentFiles),
       country: countrySnapshot,
-      env: envSnapshot, // ✅ Agregar entorno
+      env: envSnapshot,
     });
   };
 
@@ -227,6 +247,7 @@ const FileProcessor = () => {
               accept=".xls,.xlsx"
               style={{ display: "none" }}
               disabled={isProcessing}
+              onClick={(e) => (e.target.value = null)} // 🔄 permite recargar el mismo archivo
             />
             <div className="upload-icon">
               {isProcessing ? (
